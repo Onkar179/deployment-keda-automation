@@ -217,7 +217,6 @@ EOF
   done
 }
 
-# Function: Create Horizontal Pod Autoscalers (HPA) for multiple deployments
 create_hpa() {
   local config_file="$1"
   local deployment_name="$2"
@@ -230,43 +229,26 @@ create_hpa() {
     exit 1
   fi
 
-  local autoscalers=$(yq eval '.autoscalers' "$config_file")
-  if [[ -z "$autoscalers" ]]; then
-    echo "Error: No autoscaler configuration found in $config_file."
-    exit 1
-  fi
-
   local autoscaler_count=$(yq eval '.autoscalers | length' "$config_file")
   for ((i = 0; i < autoscaler_count; i++)); do
     local hpa_deployment=$(yq eval ".autoscalers[$i].deployment" "$config_file")
     local hpa_namespace=$(yq eval ".autoscalers[$i].namespace" "$config_file")
+
+    # Filter based on provided deployment and namespace
+    if [[ "$hpa_deployment" != "$deployment_name" || "$hpa_namespace" != "$namespace" ]]; then
+      echo "Skipping autoscaler for deployment: $hpa_deployment in namespace: $hpa_namespace"
+      continue
+    fi
+
     local hpa_min_replicas=$(yq eval ".autoscalers[$i].minReplicas" "$config_file")
     local hpa_max_replicas=$(yq eval ".autoscalers[$i].maxReplicas" "$config_file")
+
+    # Check if metric type is configured
     local metric_type=$(yq eval ".autoscalers[$i].metric.type" "$config_file")
-    local metric_value=$(yq eval ".autoscalers[$i].metric.value" "$config_file")
-    local metric_trigger_type=$(yq eval ".autoscalers[$i].metric.metricType" "$config_file")
+    local trigger_type=$(yq eval ".autoscalers[$i].trigger.type" "$config_file")
 
-    # Skip autoscalers that don't match the specified deployment
-    if [[ "$hpa_deployment" != "$deployment_name" ]]; then
-      continue
-    fi
-
-    if [[ -z "$metric_trigger_type" || "$metric_trigger_type" == "null" ]]; then
-      metric_type="Utilization"  # Default to Utilization if not specified
-    fi
-
-    # Debugging: Print extracted values
-    echo "Deployment: $hpa_deployment, Namespace: $hpa_namespace, MinReplicas: $hpa_min_replicas, MaxReplicas: $hpa_max_replicas"
-    echo "Metric Type: $metric_type, Metric_Trigger_Type: $metric_trigger_type, Metric Value: $metric_value"
-
-    # Validate required fields
-    if [[ -z "$hpa_deployment" || -z "$hpa_namespace" || -z "$metric_type" || -z "$metric_value" ]]; then
-      echo "Error: Missing required fields for autoscaler $i. Skipping."
-      continue
-    fi
-
-    cat <<EOF | kubectl apply -f -
-apiVersion: keda.sh/v1alpha1
+    # Prepare base ScaledObject metadata
+    local scaled_object_metadata="apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: ${hpa_deployment}-scaledobject
@@ -277,11 +259,84 @@ spec:
   minReplicaCount: ${hpa_min_replicas}
   maxReplicaCount: ${hpa_max_replicas}
   triggers:
+"
+
+    local trigger_metadata=""
+    if [[ -n "$metric_type" && "$metric_type" != "null" ]]; then
+      # Process metric-based configuration
+      local metric_value=$(yq eval ".autoscalers[$i].metric.value" "$config_file")
+      local metric_trigger_type=$(yq eval ".autoscalers[$i].metric.metricType" "$config_file")
+
+      if [[ -z "$metric_value" || -z "$metric_trigger_type" ]]; then
+        echo "Error: Missing metric configuration for autoscaler $i. Skipping."
+        continue
+      fi
+      trigger_metadata+="
   - type: ${metric_type}
     metadata:
-      value: "${metric_value}"
-      type: "${metric_trigger_type}"
-EOF
+      value: \"${metric_value}\"
+      type: \"${metric_trigger_type}\"
+"
+    elif [[ -n "$trigger_type" && "$trigger_type" != "null" ]]; then
+      # Process trigger-based configuration
+      if [[ "$trigger_type" == "queue" ]]; then
+        local queue_name=$(yq eval ".autoscalers[$i].trigger.metadata.queueName" "$config_file")
+        local queue_length=$(yq eval ".autoscalers[$i].trigger.metadata.queueLength" "$config_file")
+
+        if [[ -z "$queue_name" || -z "$queue_length" ]]; then
+          echo "Error: Missing queue configuration for autoscaler $i. Skipping."
+          continue
+        fi
+        trigger_metadata+="
+  - type: queue
+    metadata:
+      queueName: \"${queue_name}\"
+      queueLength: \"${queue_length}\"
+"
+      elif [[ "$trigger_type" == "http" ]]; then
+        local http_trigger_url=$(yq eval ".autoscalers[$i].trigger.metadata.url" "$config_file")
+        local http_trigger_threshold=$(yq eval ".autoscalers[$i].trigger.metadata.threshold" "$config_file")
+
+        if [[ -z "$http_trigger_url" || -z "$http_trigger_threshold" ]]; then
+          echo "Error: Missing HTTP trigger configuration for autoscaler $i. Skipping."
+          continue
+        fi
+        trigger_metadata+="
+  - type: http
+    metadata:
+      url: \"${http_trigger_url}\"
+      threshold: \"${http_trigger_threshold}\"
+"
+      elif [[ "$trigger_type" == "kafka" ]]; then
+        local kafka_broker=$(yq eval ".autoscalers[$i].trigger.metadata.broker" "$config_file")
+        local kafka_topic=$(yq eval ".autoscalers[$i].trigger.metadata.topic" "$config_file")
+        local kafka_partition=$(yq eval ".autoscalers[$i].trigger.metadata.partition" "$config_file")
+
+        if [[ -z "$kafka_broker" || -z "$kafka_topic" || -z "$kafka_partition" ]]; then
+          echo "Error: Missing Kafka configuration for autoscaler $i. Skipping."
+          continue
+        fi
+        trigger_metadata+="
+  - type: kafka
+    metadata:
+      broker: \"${kafka_broker}\"
+      topic: \"${kafka_topic}\"
+      partition: \"${kafka_partition}\"
+"
+      else
+        echo "Error: Unsupported trigger type $trigger_type. Skipping."
+        continue
+      fi
+    else
+      echo "Error: Missing configuration for autoscaler $i. Skipping."
+      continue
+    fi
+
+    # Combine the base metadata with the dynamically generated trigger metadata
+    local final_yaml="${scaled_object_metadata}${trigger_metadata}"
+
+    # Apply the ScaledObject to Kubernetes
+    echo "$final_yaml" | kubectl apply -f -
 
     echo "HPA for deployment ${hpa_deployment} created successfully."
   done
