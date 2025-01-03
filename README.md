@@ -6,6 +6,13 @@ This repository contains a Bash script designed to automate various Kubernetes t
 
 The script contains a series of functions that can be invoked through command-line arguments. The commands primarily work with Kubernetes resources like deployments, services, HPAs, and KEDA, along with Helm charts for managing KEDA installation and upgrades.
 
+
+## Prerequisites
+
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed and configured to interact with a Kubernetes cluster.
+- [Helm](https://helm.sh/docs/intro/install/) installed.
+- [yq](https://github.com/mikefarah/yq) installed for reading YAML configuration files
+
 ### Command Options
 
 The script accepts the following commands and arguments:
