@@ -210,3 +210,59 @@ The script ensures that:
 
 
 
+## Design Overview
+
+This script automates common Kubernetes tasks using `Helm` and `kubectl`. It supports tasks such as installing and upgrading KEDA, creating deployments, exposing services, managing Horizontal Pod Autoscalers (HPAs), and checking the health of deployments. The script is designed with robustness, ease of use, and flexibility in mind.
+
+### Key Design Choices
+
+#### **1. Error Handling with `set -euo pipefail`**
+To ensure the script behaves predictably and fails early in case of errors, the following shell options are used:
+- **`set -e`**: Exits the script immediately if any command fails.
+- **`set -u`**: Treats unset variables as errors.
+- **`set -o pipefail`**: Ensures that the script exits if any command in a pipeline fails, even if it's not the last one.
+
+These error-handling practices ensure the script fails early and clearly if there are issues, preventing unintended actions or ambiguous results.
+
+#### **2. Modular Function Design**
+Each major task (e.g., installing KEDA, creating deployments, exposing services) is encapsulated in a dedicated function. This modular approach:
+- Improves readability.
+- Allows easy extension or modification of the script.
+- Keeps the code organized and maintainable.
+
+#### **3. Flexible Command Handling**
+The script supports multiple commands (`connect`, `install-keda`, `upgrade-keda`, etc.), each corresponding to a specific Kubernetes task. Key features include:
+- Argument validation to ensure users provide the necessary input, such as configuration files or namespaces.
+- The main function interprets the command and calls the corresponding function for execution.
+
+#### **4. Configuration via YAML**
+YAML files are used to define Kubernetes resources like deployments, services, and autoscalers. This provides several benefits:
+- Flexibility in configuration.
+- Simplifies the addition of new configurations without needing to hardcode values.
+- The script uses `yq`, a YAML processor, to read and parse YAML files.
+
+Configuration files typically include:
+- Deployment configurations.
+- Resource requests and limits.
+- Horizontal Pod Autoscaler (HPA) specifications.
+
+#### **5. Helm and kubectl Integration**
+The script integrates with:
+- **Helm** for managing KEDA installation and upgrades. If KEDA is not installed, the script automatically installs it using Helm.
+- **kubectl** to interact with the Kubernetes cluster for tasks like checking deployment status and exposing services.
+
+#### **6. Health Monitoring and Resource Utilization**
+A health-checking function uses `kubectl get deployment` and `kubectl top pods` to:
+- Query the status of deployments.
+- Check resource utilization, providing valuable feedback on the health of Kubernetes resources.
+
+#### **7. Validation and Error Handling in Configuration Files**
+To ensure smooth execution, the script validates configuration files for missing or invalid fields (e.g., missing namespaces or images in deployment configurations). If there are errors:
+- The script outputs clear error messages.
+- The problematic action is skipped to prevent unintended failures.
+
+#### **8. Help and Documentation**
+The script includes a **`show_help`** function that provides easy access to the available commands and their syntax. This helps users unfamiliar with the script quickly understand its usage. Additionally:
+- The script outputs meaningful error messages when incorrect arguments are provided or when failures occur, guiding users to resolve issues.
+
+
