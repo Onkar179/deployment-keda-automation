@@ -1,5 +1,3 @@
-# deployment-keda-automation
-
 # Kubernetes Automation Script
 
 This repository contains a Bash script designed to automate various Kubernetes tasks, including managing KEDA (Kubernetes Event-Driven Autoscaling), creating deployments, exposing services, managing horizontal pod autoscalers (HPAs), and checking the health of deployments. The script leverages `kubectl` and `helm` to manage Kubernetes resources, including KEDA for autoscaling.
