@@ -246,10 +246,14 @@ create_hpa() {
     local metric_value=$(yq eval ".autoscalers[$i].metric.value" "$config_file")
     local metric_trigger_type=$(yq eval ".autoscalers[$i].metric.metricType" "$config_file")
 
+    # Skip autoscalers that don't match the specified deployment
+    if [[ "$hpa_deployment" != "$deployment_name" ]]; then
+      continue
+    fi
+
     if [[ -z "$metric_trigger_type" || "$metric_trigger_type" == "null" ]]; then
       metric_type="Utilization"  # Default to Utilization if not specified
     fi
-
 
     # Debugging: Print extracted values
     echo "Deployment: $hpa_deployment, Namespace: $hpa_namespace, MinReplicas: $hpa_min_replicas, MaxReplicas: $hpa_max_replicas"
@@ -313,11 +317,17 @@ expose_services() {
       continue
     fi
 
-    echo "Exposing service: $service_name on port $port"
-    kubectl expose deployment "$service_name" --type=LoadBalancer --name="$service_name-service" --port="$port" -n "$namespace"
-    echo "Service $service_name exposed successfully."
+    # Check if the service with the desired name already exists
+    if kubectl get service "$service_name-service" -n "$namespace" > /dev/null 2>&1; then
+      echo "Service $service_name-service already exists in namespace $namespace. Skipping creation."
+    else
+      echo "Exposing service: $service_name on port $port"
+      kubectl expose deployment "$service_name" --type=LoadBalancer --name="$service_name-service" --port="$port" -n "$namespace"
+      echo "Service $service_name exposed successfully."
+    fi
   done
 }
+
 
 
 # Function: Retrieve health status
@@ -419,4 +429,3 @@ main() {
 }
 
 main "$@"
-
