@@ -1,0 +1,27 @@
+deployments:
+  - name: my-app-1
+    image: nginx
+    namespace: default
+    port: 80
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "512Mi"
+
+autoscalers:
+  - deployment: my-app-1
+    namespace: default
+    minReplicas: 1
+    maxReplicas: 5
+    metric:
+      type: cpu
+      value: "50"
+      metricType: Utilization
+
+services:
+  - name: my-app-1
+    namespace: default
+    port: 80
