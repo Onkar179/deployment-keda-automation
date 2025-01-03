@@ -33,12 +33,13 @@ autoscalers:
       metricType: Utilization
   - deployment: my-app-2
     namespace: default
-    minReplicas: 1
-    maxReplicas: 4
-    metric:
-      type: cpu
-      value: "80"
-      metricType: Utilization
+    minReplicas: 2
+    maxReplicas: 5
+    trigger:
+      type: "queue"
+      metadata:
+        queueName: "my-queue"
+        queueLength: "10"
 
 services:
   - name: my-app-1
