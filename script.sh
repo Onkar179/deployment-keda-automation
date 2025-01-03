@@ -49,10 +49,28 @@ connect_cluster() {
 install_helm() {
   echo "Checking if Helm is installed..."
   if ! command -v helm > /dev/null 2>&1; then
-    echo "Error: Helm is not installed. Please install Helm and try again."
-    exit 1
+    echo "Helm is not installed. Installing Helm..."
+
+    # Determine the OS type
+    OS=$(uname -s)
+    if [[ "$OS" == "Linux" ]]; then
+      # Linux installation
+      curl https://get.helm.sh/helm-v3.11.0-linux-amd64.tar.gz -o helm.tar.gz
+      tar -zxvf helm.tar.gz
+      mv linux-amd64/helm /usr/local/bin/helm
+      rm -rf linux-amd64 helm.tar.gz
+    elif [[ "$OS" == "Darwin" ]]; then
+      # macOS installation
+      brew install helm
+    else
+      echo "Unsupported OS. Please install Helm manually."
+      exit 1
+    fi
+
+    echo "Helm has been installed."
+  else
+    echo "Helm is already installed."
   fi
-  echo "Helm is installed."
 }
 
 # Function: Install KEDA
